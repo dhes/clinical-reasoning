@@ -30,3 +30,4 @@ jitdump.*
 # input
 *DS_Store
 bundles/
+input-cache/
