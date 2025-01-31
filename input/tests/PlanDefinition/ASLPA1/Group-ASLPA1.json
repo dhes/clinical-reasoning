@@ -1,0 +1,17 @@
+{
+  "resourceType": "Group",
+  "id": "ASLPA1",
+  "extension": [ {
+    "url": "http://hl7.org/fhir/StructureDefinition/artifact-testArtifact",
+    "valueCanonical": "http://ecqi.healthit.gov/ecqms/Measure/ASLPA1"
+  } ],
+  "active": true,
+  "type": "person",
+  "actual": true,
+  "member": [ {
+    "entity": {
+      "reference": "Patient/positive",
+      "display": "Rick Jones"
+    }
+  } ]
+}

@@ -1,0 +1,37 @@
+{
+    "_id": "85bf8e70-cc24-43b8-8412-062a522d6a60",
+    "colName": "$questionnaire",
+    "created": "2025-01-31T17:01:26.671Z",
+    "sortNum": 40000,
+    "folders": [],
+    "requests": [
+        {
+            "_id": "2391dff7-aef1-4ad7-9fdb-c5e41b0d8f85",
+            "colId": "85bf8e70-cc24-43b8-8412-062a522d6a60",
+            "containerId": "",
+            "name": "StructureDefinition/aslp-bmi/$questionnaire",
+            "url": "StructureDefinition/aslp-bmi/$questionnaire",
+            "method": "POST",
+            "sortNum": 10000,
+            "created": "2025-01-31T17:02:08.670Z",
+            "modified": "2025-01-31T20:18:49.960Z",
+            "headers": [],
+            "body": {
+                "type": "json",
+                "raw": "{\n  \"resourceType\": \"Parameters\",\n  \"parameter\": [\n    {\n      \"name\": \"url\",\n      \"valueUri\": \"http://example.org/sdh/dtr/aslp/StructureDefinition/aslp-bmi\"\n    }\n  ]\n}",
+                "form": []
+            }
+        }
+    ],
+    "settings": {
+        "headers": [
+            {
+                "name": "Content-Type",
+                "value": "application/fhir+json"
+            }
+        ],
+        "options": {
+            "baseUrl": "{{FHIR_SERVER_URL}}"
+        }
+    }
+}

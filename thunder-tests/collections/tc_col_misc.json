@@ -1,0 +1,32 @@
+{
+    "_id": "3a6a490d-9171-4060-9744-817e23747d80",
+    "colName": "misc",
+    "created": "2025-01-31T15:54:32.332Z",
+    "sortNum": 10000,
+    "folders": [],
+    "requests": [
+        {
+            "_id": "ddedc69e-5f82-4a7d-a609-a024e39304db",
+            "colId": "3a6a490d-9171-4060-9744-817e23747d80",
+            "containerId": "",
+            "name": "utility",
+            "url": "Patient",
+            "method": "GET",
+            "sortNum": 10000,
+            "created": "2025-01-31T15:55:04.745Z",
+            "modified": "2025-01-31T17:03:22.678Z",
+            "headers": []
+        }
+    ],
+    "settings": {
+        "headers": [
+            {
+                "name": "Content-Type",
+                "value": "application/fhir+json"
+            }
+        ],
+        "options": {
+            "baseUrl": "{{FHIR_SERVER_URL}}"
+        }
+    }
+}
