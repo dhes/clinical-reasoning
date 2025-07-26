@@ -43,6 +43,7 @@ public class R4CqlExecutionService {
             Endpoint terminologyEndpoint,
             String content) {
 
+
         var baseCqlExecutionProcessor = new CqlExecutionProcessor();
 
         if (prefetchData != null) {
@@ -79,18 +80,61 @@ public class R4CqlExecutionService {
                         null);
             }
 
+            // Pre-compile inline CQL content and add to cache before creating engine
+            org.hl7.elm.r1.VersionedIdentifier libraryIdentifier = null;
+            if (!StringUtils.isBlank(content)) {
+                try {
+                    // Create a temporary library manager to resolve the library identifier
+                    var tempModelManager = new org.cqframework.cql.cql2elm.ModelManager();
+                    var tempLibraryManager = new org.cqframework.cql.cql2elm.LibraryManager(
+                            tempModelManager, 
+                            evaluationSettings.getCqlOptions().getCqlCompilerOptions());
+                    libraryIdentifier = baseCqlExecutionProcessor.resolveLibraryIdentifier(content, null, tempLibraryManager);
+                    
+                    if (libraryIdentifier != null) {
+                        // Compile the CQL content
+                        var translator = org.cqframework.cql.cql2elm.CqlTranslator.fromText(content, tempLibraryManager);
+                        if (translator.getTranslatedLibrary() != null) {
+                            // Add the compiled library to the evaluation settings cache BEFORE creating the engine
+                            evaluationSettings.getLibraryCache().put(libraryIdentifier, translator.getTranslatedLibrary());
+                            
+                        }
+                    }
+                } catch (Exception ex) {
+                    return parameters(part("evaluation error", (OperationOutcome)
+                            baseCqlExecutionProcessor.createIssue("error", "Failed to compile inline CQL content: " + ex.getMessage(), repository)));
+                }
+            }
+            
+            // Now create the engine - it will use the updated cache
             var engine = Engines.forRepository(repository, evaluationSettings, null);
-            var libraryManager = engine.getEnvironment().getLibraryManager();
-            var libraryIdentifier = baseCqlExecutionProcessor.resolveLibraryIdentifier(content, null, libraryManager);
 
-            return (Parameters) libraryEngine.evaluate(
+            // If we don't have a library identifier from content, we need to handle this case
+            if (libraryIdentifier == null) {
+                return parameters(part("evaluation error", (OperationOutcome)
+                        baseCqlExecutionProcessor.createIssue("error", "Could not resolve library identifier from content", repository)));
+            }
+
+            // Use the engine we created with the cached library, not libraryEngine.evaluate() 
+            // which would create a new engine without our cache
+            var cqlFhirParametersConverter = Engines.getCqlFhirParametersConverter(repository.fhirContext());
+            var evaluationParameters = cqlFhirParametersConverter.toCqlParameters(parameters);
+            
+            var contextParameter = subject != null ? 
+                org.apache.commons.lang3.tuple.Pair.<String, Object>of("Patient", subject.startsWith("Patient/") ? subject.replace("Patient/", "") : subject) : 
+                null;
+            
+            var expressions = expression == null ? null : Collections.singleton(expression);
+            
+            var result = engine.evaluate(
                     libraryIdentifier,
-                    subject,
-                    parameters,
+                    expressions,
+                    contextParameter,
+                    evaluationParameters,
                     null,
-                    data,
-                    null,
-                    expression == null ? null : Collections.singleton(expression));
+                    null);
+            
+            return (Parameters) cqlFhirParametersConverter.toFhirParameters(result);
 
         } catch (Exception e) {
             return parameters(part("evaluation error", (OperationOutcome)
