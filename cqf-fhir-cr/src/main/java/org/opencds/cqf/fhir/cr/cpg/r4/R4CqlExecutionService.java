@@ -4,7 +4,6 @@ import static org.opencds.cqf.fhir.utility.r4.Parameters.parameters;
 import static org.opencds.cqf.fhir.utility.r4.Parameters.part;
 
 import ca.uhn.fhir.repository.IRepository;
-import java.util.Collections;
 import java.util.List;
 import org.apache.commons.lang3.StringUtils;
 import org.hl7.fhir.r4.model.BooleanType;
@@ -27,6 +26,7 @@ public class R4CqlExecutionService {
         this.repository = repository;
         this.evaluationSettings = evaluationSettings;
     }
+
 
     // should use adapters to make this version agnostic
     public Parameters evaluate(
@@ -61,7 +61,7 @@ public class R4CqlExecutionService {
         try {
             if (contentEndpoint != null) {
                 repository = Repositories.proxy(
-                        repository, useServerData.booleanValue(), dataEndpoint, contentEndpoint, terminologyEndpoint);
+                        repository, useServerData != null ? useServerData.booleanValue() : true, dataEndpoint, contentEndpoint, terminologyEndpoint);
             }
             var libraryEngine = new LibraryEngine(repository, this.evaluationSettings);
 
@@ -80,60 +80,51 @@ public class R4CqlExecutionService {
                         null);
             }
 
-            // Pre-compile inline CQL content and add to cache before creating engine
-            org.hl7.elm.r1.VersionedIdentifier libraryIdentifier = null;
+            // Use CLI approach: extract library name and create simple identifier
+            String libraryName = null;
             if (!StringUtils.isBlank(content)) {
-                try {
-                    // Create a temporary library manager to resolve the library identifier
-                    var tempModelManager = new org.cqframework.cql.cql2elm.ModelManager();
-                    var tempLibraryManager = new org.cqframework.cql.cql2elm.LibraryManager(
-                            tempModelManager, 
-                            evaluationSettings.getCqlOptions().getCqlCompilerOptions());
-                    libraryIdentifier = baseCqlExecutionProcessor.resolveLibraryIdentifier(content, null, tempLibraryManager);
-                    
-                    if (libraryIdentifier != null) {
-                        // Compile the CQL content
-                        var translator = org.cqframework.cql.cql2elm.CqlTranslator.fromText(content, tempLibraryManager);
-                        if (translator.getTranslatedLibrary() != null) {
-                            // Add the compiled library to the evaluation settings cache BEFORE creating the engine
-                            evaluationSettings.getLibraryCache().put(libraryIdentifier, translator.getTranslatedLibrary());
-                            
-                        }
-                    }
-                } catch (Exception ex) {
+                // Extract library name from content using regex
+                java.util.regex.Pattern libraryPattern = java.util.regex.Pattern.compile("library\\s+([A-Za-z0-9_]+)");
+                java.util.regex.Matcher libraryMatcher = libraryPattern.matcher(content);
+                if (libraryMatcher.find()) {
+                    libraryName = libraryMatcher.group(1);
+                } else {
                     return parameters(part("evaluation error", (OperationOutcome)
-                            baseCqlExecutionProcessor.createIssue("error", "Failed to compile inline CQL content: " + ex.getMessage(), repository)));
+                            baseCqlExecutionProcessor.createIssue("error", "Could not extract library name from CQL content", repository)));
                 }
             }
             
-            // Now create the engine - it will use the updated cache
-            var engine = Engines.forRepository(repository, evaluationSettings, null);
+            
 
-            // If we don't have a library identifier from content, we need to handle this case
-            if (libraryIdentifier == null) {
+            // If we don't have a library name from content, we need to handle this case
+            if (libraryName == null) {
                 return parameters(part("evaluation error", (OperationOutcome)
-                        baseCqlExecutionProcessor.createIssue("error", "Could not resolve library identifier from content", repository)));
+                        baseCqlExecutionProcessor.createIssue("error", "Could not extract library name from content", repository)));
             }
 
-            // Use the engine we created with the cached library, not libraryEngine.evaluate() 
-            // which would create a new engine without our cache
-            var cqlFhirParametersConverter = Engines.getCqlFhirParametersConverter(repository.fhirContext());
-            var evaluationParameters = cqlFhirParametersConverter.toCqlParameters(parameters);
+            // Create simple identifier like CLI does (no version)
+            var libraryIdentifier = new org.hl7.elm.r1.VersionedIdentifier().withId(libraryName);
             
+            // Prepare context parameter like CLI does
             var contextParameter = subject != null ? 
                 org.apache.commons.lang3.tuple.Pair.<String, Object>of("Patient", subject.startsWith("Patient/") ? subject.replace("Patient/", "") : subject) : 
                 null;
             
-            var expressions = expression == null ? null : Collections.singleton(expression);
+            // Create engine first, then register source provider like CLI does
+            var engine = Engines.forRepository(repository, evaluationSettings, data);
             
-            var result = engine.evaluate(
-                    libraryIdentifier,
-                    expressions,
-                    contextParameter,
-                    evaluationParameters,
-                    null,
-                    null);
+            // Register inline CQL content as source provider (CLI approach)
+            var inlineSourceProvider = new org.cqframework.cql.cql2elm.StringLibrarySourceProvider(java.util.Arrays.asList(content));
+            engine.getEnvironment()
+                    .getLibraryManager()
+                    .getLibrarySourceLoader()
+                    .registerProvider(inlineSourceProvider);
             
+            // Use CLI approach: null expressions means "evaluate all"
+            var result = engine.evaluate(libraryIdentifier, null, contextParameter);
+            
+            // Convert result to FHIR Parameters
+            var cqlFhirParametersConverter = Engines.getCqlFhirParametersConverter(repository.fhirContext());
             return (Parameters) cqlFhirParametersConverter.toFhirParameters(result);
 
         } catch (Exception e) {
