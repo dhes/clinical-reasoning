@@ -80,14 +80,17 @@ public class R4CqlExecutionService {
                         null);
             }
 
-            // Use CLI approach: extract library name and create simple identifier
+            // Extract library name and version from content using regex
             String libraryName = null;
+            String libraryVersion = null;
             if (!StringUtils.isBlank(content)) {
-                // Extract library name from content using regex
-                java.util.regex.Pattern libraryPattern = java.util.regex.Pattern.compile("library\\s+([A-Za-z0-9_]+)");
+                // Extract library name and optional version from content using regex
+                // Pattern matches: library LibraryName version 'x.x.x' or library LibraryName version "x.x.x" or just library LibraryName
+                java.util.regex.Pattern libraryPattern = java.util.regex.Pattern.compile("library\\s+([A-Za-z0-9_]+)(?:\\s+version\\s+['\"]([^'\"]+)['\"])?");
                 java.util.regex.Matcher libraryMatcher = libraryPattern.matcher(content);
                 if (libraryMatcher.find()) {
                     libraryName = libraryMatcher.group(1);
+                    libraryVersion = libraryMatcher.group(2); // Will be null if no version specified
                 } else {
                     return parameters(part("evaluation error", (OperationOutcome)
                             baseCqlExecutionProcessor.createIssue("error", "Could not extract library name from CQL content", repository)));
@@ -102,8 +105,11 @@ public class R4CqlExecutionService {
                         baseCqlExecutionProcessor.createIssue("error", "Could not extract library name from content", repository)));
             }
 
-            // Create simple identifier like CLI does (no version)
+            // Create versioned identifier with both name and version (if available)
             var libraryIdentifier = new org.hl7.elm.r1.VersionedIdentifier().withId(libraryName);
+            if (libraryVersion != null) {
+                libraryIdentifier.withVersion(libraryVersion);
+            }
             
             // Prepare context parameter like CLI does
             var contextParameter = subject != null ? 
