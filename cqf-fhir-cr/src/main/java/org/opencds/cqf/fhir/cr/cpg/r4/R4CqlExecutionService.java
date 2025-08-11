@@ -27,6 +27,18 @@ public class R4CqlExecutionService {
         this.evaluationSettings = evaluationSettings;
     }
 
+    // Helper method from CQF Ruler for resolving context parameters
+    private org.apache.commons.lang3.tuple.Pair<String, Object> resolveContextParameter(String subject) {
+        if (StringUtils.isBlank(subject)) {
+            return null;
+        }
+        String[] reference = subject.split("/");
+        return org.apache.commons.lang3.tuple.Pair.of(
+            reference.length > 1 ? reference[0] : "Patient", 
+            reference.length > 1 ? reference[1] : subject
+        );
+    }
+
 
     // should use adapters to make this version agnostic
     public Parameters evaluate(
@@ -59,10 +71,11 @@ public class R4CqlExecutionService {
         }
 
         try {
-            if (contentEndpoint != null) {
-                repository = Repositories.proxy(
-                        repository, useServerData != null ? useServerData.booleanValue() : true, dataEndpoint, contentEndpoint, terminologyEndpoint);
-            }
+            // Temporarily bypass repository proxy to test patient context resolution
+            // if (contentEndpoint != null) {
+            //     repository = Repositories.proxy(
+            //             repository, useServerData != null ? useServerData.booleanValue() : true, dataEndpoint, contentEndpoint, terminologyEndpoint);
+            // }
             var libraryEngine = new LibraryEngine(repository, this.evaluationSettings);
 
             var libraries = baseCqlExecutionProcessor.resolveIncludedLibraries(library);
@@ -111,22 +124,26 @@ public class R4CqlExecutionService {
                 libraryIdentifier.withVersion(libraryVersion);
             }
             
-            // Prepare context parameter like CLI does
-            var contextParameter = subject != null ? 
-                org.apache.commons.lang3.tuple.Pair.<String, Object>of("Patient", subject.startsWith("Patient/") ? subject.replace("Patient/", "") : subject) : 
-                null;
+            // Use CQF Ruler approach: resolve context parameter like the original
+            var contextParameter = resolveContextParameter(subject);
+            System.out.println("DEBUG: contextParameter = " + contextParameter);
             
-            // Create engine first, then register source provider like CLI does
+            // Remove from cache like CQF Ruler does (ensures content changes are reflected)
+            evaluationSettings.getLibraryCache().remove(libraryIdentifier);
+            
+            // Create engine with inline source provider (simplified approach)
             var engine = Engines.forRepository(repository, evaluationSettings, data);
             
-            // Register inline CQL content as source provider (CLI approach)
+            // Register inline CQL content as source provider
             var inlineSourceProvider = new org.cqframework.cql.cql2elm.StringLibrarySourceProvider(java.util.Arrays.asList(content));
             engine.getEnvironment()
                     .getLibraryManager()
                     .getLibrarySourceLoader()
                     .registerProvider(inlineSourceProvider);
             
-            // Use CLI approach: null expressions means "evaluate all"
+            System.out.println("DEBUG: About to evaluate with libraryIdentifier = " + libraryIdentifier.getId() + " version = " + libraryIdentifier.getVersion());
+            
+            // Use engine evaluation with proper context parameter
             var result = engine.evaluate(libraryIdentifier, null, contextParameter);
             
             // Convert result to FHIR Parameters
