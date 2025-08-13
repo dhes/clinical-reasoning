@@ -71,6 +71,11 @@ public class R4CqlExecutionService {
         }
 
         try {
+            // Default useServerData to true if null (per FHIR spec)
+            if (useServerData == null) {
+                useServerData = new BooleanType(true);
+            }
+            
             // Temporarily bypass repository proxy to test patient context resolution
             // if (contentEndpoint != null) {
             //     repository = Repositories.proxy(
